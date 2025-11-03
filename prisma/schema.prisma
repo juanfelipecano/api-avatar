@@ -1,0 +1,89 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  // shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+}
+
+model character_types {
+  id          Int       @id @default(autoincrement())
+  description String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime? @updatedAt
+
+  character_relations character_relations[]
+}
+
+model skill_types {
+  id          Int       @id @default(autoincrement())
+  description String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime? @updatedAt
+
+  skills skills[]
+}
+
+model skills {
+  id          String    @id
+  name        String
+  description String?
+  image_url   String?
+  type_id     Int
+  skill_id    String?
+  source_url  String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime? @updatedAt
+
+  type      skill_types @relation(fields: [type_id], references: [id])
+  sub_skill skills?     @relation("SkillHierarchy", fields: [skill_id], references: [id])
+
+  skills           skills[]           @relation("SkillHierarchy")
+  character_skills character_skills[]
+}
+
+model characters {
+  id          String    @id
+  name        String
+  description String?
+  image_url   String?
+  source_url  String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime? @updatedAt
+
+  character_skills   character_skills[]
+  character_relateds character_relations[] @relation("CharacterToRelated")
+  relateds_character character_relations[] @relation("RelatedToCharacter")
+}
+
+model character_skills {
+  id           Int    @id @default(autoincrement())
+  character_id String
+  skill_id     String
+
+  character characters @relation(fields: [character_id], references: [id])
+  skill     skills     @relation(fields: [skill_id], references: [id])
+
+  @@unique([character_id, skill_id])
+}
+
+model character_relations {
+  id               Int    @id @default(autoincrement())
+  character_id     String
+  relation_id      String
+  relation_type_id Int
+
+  character characters      @relation("CharacterToRelated", fields: [character_id], references: [id])
+  related   characters      @relation("RelatedToCharacter", fields: [relation_id], references: [id])
+  type      character_types @relation(fields: [relation_type_id], references: [id])
+
+  @@unique([character_id, relation_id, relation_type_id])
+}

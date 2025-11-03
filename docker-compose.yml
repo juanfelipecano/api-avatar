@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: postgres_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-appdb}
+      POSTGRES_USER: ${POSTGRES_USER:-appuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-apppass}
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nest_api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Important: host = "db" (service name)
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-appuser}:${POSTGRES_PASSWORD:-apppass}@db:5432/${POSTGRES_DB:-appdb}?schema=public"
+      PORT: "3000"
+      NODE_ENV: "development"
+      RUN_SEED: ${RUN_SEED:-false}
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3000', res=>{process.exit(res.statusCode<400?0:1)}).on('error', ()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  db_data:
