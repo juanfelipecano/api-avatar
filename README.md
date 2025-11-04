@@ -209,3 +209,53 @@ docker-compose logs -f db
 ```
 
 If you want, I can add a `RUN_SEED` env switch to the compose file and implement the guard in `docker-entrypoint.sh` so the seed only runs when enabled. Let me know and I will add it.
+
+
+## Estructura del Proyecto
+
+```
+api-avatar/
+├── prisma/                                    # Gestión de base de datos y configuración ORM
+│   ├── migrations/                            # Historial de migraciones
+│   ├── schema.prisma                          # Definición del esquema Prisma (modelos, relaciones, enums)
+│   └── seed.ts                                # Script para ingresar datos iniciales
+├── src/                                       # Código fuente principal de la aplicación
+│   ├── constants/                             # Constantes y enumeraciones globales de la aplicación
+│   ├── modules/                               # Módulos de funcionalidad organizados por dominio
+│   │   ├── characters/                        # Módulo de gestión de personajes
+│   │   │   └── v1/                            # Versión 1 de la API de personajes
+│   │   │       ├── entities/                  # Definiciones de entidades TypeScript
+│   │   │       └── mappers/                   # Lógica de transformación de datos
+│   │   ├── prisma/                            # Módulo del cliente de base de datos
+│   │   │   ├── prisma.module.ts               # Módulo que expone PrismaService
+│   │   │   ├── prisma.service.spec.ts         # Pruebas unitarias del servicio Prisma
+│   │   │   └── prisma.service.ts              # Wrapper y configuración del cliente Prisma
+│   │   ├── skills/                            # Módulo de gestión de habilidades
+│   │   │   └── v1/                            # Versión 1 de la API de habilidades
+│   │   │       ├── entities/                  # Definiciones de entidades TypeScript
+│   │   │       └── mappers/                   # Lógica de transformación de datos
+│   │   └── index.ts                           # Exportación barrel de todos los módulos
+│   └── utils/                                 # Funciones utilitarias compartidas
+├── .dockerignore                              # Archivos a excluir de las construcciones Docker
+├── .env.example                               # Plantilla de variables de entorno
+├── .eslintrc.js                               # Configuración de ESLint para calidad de código
+├── .gitignore                                 # Archivos a excluir del control de versiones
+├── .prettierrc                                # Configuración de Prettier para formato de código
+├── docker-compose.yml                         # Orquestación Docker multi-contenedor
+├── docker-entrypoint.sh                       # Script de inicio del contenedor (migraciones + seed)
+├── Dockerfile                                 # Instrucciones de construcción de imagen Docker
+├── nest-cli.json                              # Configuración del CLI de NestJS
+├── package.json                               # Dependencias y scripts NPM
+├── README.md                                  # Documentación del proyecto
+├── tsconfig.build.json                        # Configuración de compilación TypeScript
+└── tsconfig.json                              # Configuración base del compilador TypeScript
+```
+
+### Resumen de Directorios
+
+- **`prisma/`** - Esquema de base de datos, migraciones y scripts de siembra para PostgreSQL con Prisma ORM
+- **`src/`** - Código fuente principal de la aplicación siguiendo patrones de arquitectura NestJS
+  - **`constants/`** - Constantes y enums globales para tipos de personajes y categorías de habilidades
+  - **`modules/`** - Módulos de funcionalidad organizados por dominio (characters, skills, prisma) con APIs versionadas
+  - **`utils/`** - Funciones utilitarias reutilizables para manejo de URLs y paginación
+- **Archivos de configuración** - Docker, TypeScript, ESLint, Prettier y herramientas de NestJS
