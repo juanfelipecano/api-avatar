@@ -5,7 +5,6 @@ import { Utils } from '../../../utils';
 
 @Injectable()
 export class CharactersService {
-
   private readonly _include = {
     character_skills: {
       include: {
@@ -48,8 +47,11 @@ export class CharactersService {
     const _characters = characters.map((character) => {
       return {
         ...character,
-        relations: [...character.character_relateds, ...character.relateds_character],
-      }
+        relations: [
+          ...character.character_relateds,
+          ...character.relateds_character,
+        ],
+      };
     });
 
     return {
@@ -70,11 +72,14 @@ export class CharactersService {
 
     const mappedCharacter = {
       ...character,
-      relations: [...character.character_relateds, ...character.relateds_character],
+      relations: [
+        ...character.character_relateds,
+        ...character.relateds_character,
+      ],
     };
 
     return {
       data: CharacterMapper.map(mappedCharacter, host),
-    }
+    };
   }
 }

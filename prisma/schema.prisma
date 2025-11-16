@@ -6,6 +6,9 @@
 
 generator client {
   provider = "prisma-client-js"
+  
+  // Modern seed configuration for Prisma 6.x
+  seed = "node dist/prisma/seed.js"
 }
 
 datasource db {

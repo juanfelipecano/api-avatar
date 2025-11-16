@@ -5,11 +5,12 @@ const map = (relation: any): string => {
 };
 
 const mapList = (relations: any, type: CharacterType): string[] => {
-  return relations.filter((relation) => relation.relation_type_id === type)
+  return relations
+    .filter((relation) => relation.relation_type_id === type)
     .map((relation) => map(relation));
 };
 
 export const RelationsMapper = {
   map,
-  mapList
+  mapList,
 };

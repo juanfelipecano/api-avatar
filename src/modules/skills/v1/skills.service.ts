@@ -5,7 +5,6 @@ import { Utils } from '../../../utils';
 
 @Injectable()
 export class SkillsService {
-
   constructor(private readonly prisma: PrismaService) {}
 
   public async findAll(host: string, page?: number, limit?: number) {

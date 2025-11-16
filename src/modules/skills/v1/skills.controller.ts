@@ -1,4 +1,12 @@
-import { Controller, Get, HttpException, HttpStatus, Param, Query, Req } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  HttpException,
+  HttpStatus,
+  Param,
+  Query,
+  Req,
+} from '@nestjs/common';
 import { Utils } from '../../../utils';
 import { SkillsService } from './skills.service';
 
@@ -7,7 +15,6 @@ import { SkillsService } from './skills.service';
   path: 'skills',
 })
 export class SkillsController {
-
   private readonly _limit = 5;
 
   constructor(private readonly skillsService: SkillsService) {}
@@ -22,18 +29,28 @@ export class SkillsController {
       const _page = parseInt(page, 10) || undefined;
       let _limit = parseInt(limit, 10) || undefined;
 
-      _limit = (_page && !_limit) ? this._limit : _limit;
+      _limit = _page && !_limit ? this._limit : _limit;
 
-      return await this.skillsService.findAll(Utils.getUrlPath(request), _page, _limit);
+      return await this.skillsService.findAll(
+        Utils.getUrlPath(request),
+        _page,
+        _limit,
+      );
     } catch (error) {
-      throw new HttpException('Error processing', HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(
+        'Error processing',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 
   @Get(':id')
   public async findOne(@Param('id') id: string, @Req() request: Request) {
     try {
-      const result = await this.skillsService.findOne(id, Utils.getUrlPath(request));
+      const result = await this.skillsService.findOne(
+        id,
+        Utils.getUrlPath(request),
+      );
 
       if (!result.data) {
         throw new HttpException(null, HttpStatus.NOT_FOUND);

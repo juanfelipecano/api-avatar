@@ -1,7 +1,7 @@
 #!/usr/bin/env groovy
 
-// Simple Jenkins Pipeline for Docker Build Only
-// Purpose: Build Docker image from your existing Dockerfile (no npm needed)
+// Complete Jenkins Pipeline for NestJS API
+// Purpose: Build, test, and containerize NestJS application
 
 pipeline {
     agent any
@@ -12,13 +12,14 @@ pipeline {
         BUILD_NUMBER = "${BUILD_NUMBER}"
         GIT_COMMIT = "${GIT_COMMIT}"
         GIT_BRANCH = "${GIT_BRANCH}"
+        NODE_ENV = 'production'
     }
     
     parameters {
         choice(
             name: 'ACTION',
-            choices: ['build', 'build-push'],
-            description: 'What to do: build only or build and push'
+            choices: ['build', 'test-build', 'build-push'],
+            description: 'What to do: build only, test + build, or build + push'
         )
         string(
             name: 'TAG',
@@ -29,6 +30,11 @@ pipeline {
             name: 'REGISTRY',
             defaultValue: '',
             description: 'Docker registry URL (optional, e.g., your-registry.com/project)'
+        )
+        booleanParam(
+            name: 'SKIP_TESTS',
+            defaultValue: false,
+            description: 'Skip tests (NOT RECOMMENDED for production)'
         )
     }
     
@@ -46,6 +52,72 @@ pipeline {
             }
         }
         
+        stage('Install Dependencies') {
+            when {
+                expression { params.ACTION == 'test-build' || params.ACTION == 'build-push' }
+            }
+            steps {
+                echo "📦 Installing Node.js dependencies..."
+                sh """
+                    echo "🔧 Using Node.js version:"
+                    node --version
+                    npm --version
+                    
+                    echo "📦 Installing dependencies..."
+                    npm ci
+                    
+                    echo "🔧 Generating Prisma client..."
+                    npx prisma generate
+                    
+                    echo "✅ Dependencies installed successfully"
+                """
+            }
+        }
+        
+        stage('Run Tests') {
+            when {
+                allOf {
+                    expression { params.ACTION == 'test-build' || params.ACTION == 'build-push' }
+                    expression { !params.SKIP_TESTS }
+                }
+            }
+            steps {
+                echo "🧪 Running tests..."
+                sh """
+                    echo "🧪 Running unit tests..."
+                    npm run test
+                    
+                    echo "🧪 Running e2e tests..."
+                    npm run test:e2e
+                    
+                    echo "✅ All tests passed"
+                """
+            }
+            post {
+                always {
+                    publishTestResults testResultsPattern: 'test-results.xml'
+                }
+            }
+        }
+        
+        stage('Build Application') {
+            when {
+                expression { params.ACTION == 'test-build' || params.ACTION == 'build-push' }
+            }
+            steps {
+                echo "🔨 Building NestJS application..."
+                sh """
+                    echo "🔨 Compiling TypeScript..."
+                    npm run build
+                    
+                    echo "🌱 Building seed data..."
+                    npm run build:seed
+                    
+                    echo "✅ Application built successfully"
+                """
+            }
+        }
+        
         stage('Build Docker Image') {
             steps {
                 echo "🐳 Building Docker image..."
@@ -56,6 +128,10 @@ pipeline {
                     
                     sh """
                         echo "🏗️ Building Docker image: ${fullTag}"
+                        echo "📋 Docker build context: $(pwd)"
+                        echo "📄 Dockerfile contents:"
+                        cat Dockerfile
+                        
                         docker build -t ${fullTag} .
                         
                         if [ "${params.REGISTRY}" != "" ]; then
@@ -73,6 +149,8 @@ pipeline {
                     echo "  - Build Number: ${env.BUILD_NUMBER}"
                     echo "  - Git Commit: ${env.GIT_COMMIT}"
                     echo "  - Git Branch: ${env.GIT_BRANCH}"
+                    echo "  - Action: ${params.ACTION}"
+                    echo "  - Skip Tests: ${params.SKIP_TESTS}"
                 }
             }
         }
@@ -113,11 +191,13 @@ pipeline {
                 echo "  - Result: ${currentBuild.currentResult}"
                 echo "  - Duration: ${currentBuild.duration / 1000}s"
                 echo "  - Build Number: ${currentBuild.number}"
+                echo "  - Git Commit: ${env.GIT_COMMIT}"
+                echo "  - Git Branch: ${env.GIT_BRANCH}"
             }
         }
         
         success {
-            echo "🎉 Docker build completed successfully!"
+            echo "🎉 Build completed successfully!"
             
             script {
                 if (params.REGISTRY != '') {
@@ -131,10 +211,16 @@ pipeline {
         }
         
         failure {
-            echo "❌ Docker build failed - please check the logs"
+            echo "❌ Build failed - please check the logs"
             echo "🔍 Debugging info:"
+            sh 'node --version'
+            sh 'npm --version'
             sh 'docker --version'
             sh 'docker images'
+        }
+        
+        unstable {
+            echo "⚠️ Build completed with warnings (tests may have failed)"
         }
     }
 }

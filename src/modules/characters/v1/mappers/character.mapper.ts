@@ -18,7 +18,7 @@ const map = (character: any, host: string): Character => {
     description: character.description,
     imageUrl: character.image_url,
     sourceUrl: character.source_url,
-    url: `${ host }/characters/${ character.id }`,
+    url: `${host}/characters/${character.id}`,
     skills: {
       bending: SkillsMapper.mapList(bendingSkills, host),
       other: SkillsMapper.mapList(otherSkills, host),
@@ -26,13 +26,13 @@ const map = (character: any, host: string): Character => {
     allies: RelationsMapper.mapList(character.relations, CharacterType.ALLY),
     enemies: RelationsMapper.mapList(character.relations, CharacterType.ENEMY),
   };
-}
+};
 
 const mapList = (characters: any, host: string): Character[] => {
   return characters.map((character) => map(character, host));
-}
+};
 
 export const CharacterMapper = {
   map,
-  mapList
+  mapList,
 };

@@ -1,4 +1,12 @@
-import { Controller, Get, HttpException, HttpStatus, Param, Query, Req } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  HttpException,
+  HttpStatus,
+  Param,
+  Query,
+  Req,
+} from '@nestjs/common';
 import { Utils } from '../../../utils';
 import { CharactersService } from './characters.service';
 
@@ -7,7 +15,6 @@ import { CharactersService } from './characters.service';
   path: 'characters',
 })
 export class CharactersController {
-
   private readonly _limit = 10;
 
   constructor(private readonly charactersService: CharactersService) {}
@@ -22,20 +29,33 @@ export class CharactersController {
       const _page = parseInt(page, 10) || undefined;
       let _limit = parseInt(limit, 10) || undefined;
 
-      _limit = (_page && !_limit) ? this._limit : _limit;
+      _limit = _page && !_limit ? this._limit : _limit;
 
-      return await this.charactersService.findAll(Utils.getUrlPath(request), _page, _limit);
+      return await this.charactersService.findAll(
+        Utils.getUrlPath(request),
+        _page,
+        _limit,
+      );
     } catch (error) {
-      throw new HttpException('Error processing', HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(
+        'Error processing',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 
   @Get(':id')
   public async findOne(@Req() request: Request, @Param('id') id: string) {
     try {
-      return await this.charactersService.findOne(id, Utils.getUrlPath(request));
+      return await this.charactersService.findOne(
+        id,
+        Utils.getUrlPath(request),
+      );
     } catch (error) {
-      throw new HttpException('Error processing', HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(
+        'Error processing',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 }
