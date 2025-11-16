@@ -15,7 +15,17 @@ services:
     volumes:
       - jenkins_home:/var/jenkins_home
       - /var/run/docker.sock:/var/run/docker.sock
+      # Ensure proper permissions for docker socket
+      - /var/run/docker.sock:/var/run/docker.sock:rw
     restart: unless-stopped
+    # Run as root temporarily to fix permissions, then switch to jenkins user
+    command: >
+      sh -c "
+        # Fix docker socket permissions
+        chown -R jenkins:jenkins /var/jenkins_home || true
+        # Start Jenkins
+        exec /usr/bin/tini -- /usr/local/bin/jenkins.sh
+      "
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
