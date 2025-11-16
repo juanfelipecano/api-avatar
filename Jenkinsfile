@@ -1,13 +1,40 @@
 #!/usr/bin/env groovy
 
-// Basic Jenkins Pipeline for NestJS - Build and Test Only
-// Purpose: Simple CI pipeline with no deployment
+// Simple Jenkins Pipeline for Docker Build Only
+// Purpose: Build Docker image from your existing Dockerfile (no npm needed)
 
 pipeline {
     agent any
     
     environment {
-        NODE_ENV = "test"
+        // Build configuration
+        IMAGE_NAME = 'avatar-api'
+        BUILD_NUMBER = "${BUILD_NUMBER}"
+        GIT_COMMIT = "${GIT_COMMIT}"
+        GIT_BRANCH = "${GIT_BRANCH}"
+    }
+    
+    parameters {
+        choice(
+            name: 'ACTION',
+            choices: ['build', 'build-push'],
+            description: 'What to do: build only or build and push'
+        )
+        string(
+            name: 'TAG',
+            defaultValue: 'latest',
+            description: 'Docker image tag (optional, defaults to latest)'
+        )
+        string(
+            name: 'REGISTRY',
+            defaultValue: '',
+            description: 'Docker registry URL (optional, e.g., your-registry.com/project)'
+        )
+    }
+    
+    triggers {
+        githubPush()
+        pollSCM('H/15 * * * *')
     }
     
     stages {
@@ -19,55 +46,62 @@ pipeline {
             }
         }
         
-        stage('Install Dependencies') {
+        stage('Build Docker Image') {
             steps {
-                echo "📦 Installing dependencies..."
-                sh '''
-                    echo "🔄 Installing npm packages..."
-                    npm ci --cache /tmp/npm-cache --prefer-offline
-                    echo "✅ Dependencies installed"
-                '''
+                echo "🐳 Building Docker image..."
+                
+                script {
+                    def imageTag = params.TAG ?: 'latest'
+                    def fullTag = "${IMAGE_NAME}:${imageTag}"
+                    
+                    sh """
+                        echo "🏗️ Building Docker image: ${fullTag}"
+                        docker build -t ${fullTag} .
+                        
+                        if [ "${params.REGISTRY}" != "" ]; then
+                            docker tag ${fullTag} ${params.REGISTRY}/${fullTag}
+                            echo "✅ Tagged image for registry: ${params.REGISTRY}/${fullTag}"
+                        fi
+                        
+                        echo "✅ Docker build completed"
+                        docker images ${IMAGE_NAME}
+                    """
+                    
+                    echo "📊 Build Information:"
+                    echo "  - Image Name: ${env.IMAGE_NAME}"
+                    echo "  - Tag: ${imageTag}"
+                    echo "  - Build Number: ${env.BUILD_NUMBER}"
+                    echo "  - Git Commit: ${env.GIT_COMMIT}"
+                    echo "  - Git Branch: ${env.GIT_BRANCH}"
+                }
             }
         }
         
-        stage('Generate Prisma Client') {
-            steps {
-                echo "🔄 Generating Prisma client..."
-                sh '''
-                    echo "🗄️ Generating Prisma client..."
-                    npx prisma generate
-                    echo "✅ Prisma client generated"
-                '''
+        stage('Push to Registry (Optional)') {
+            when {
+                expression { params.ACTION == 'build-push' && params.REGISTRY != '' }
             }
-        }
-        
-        stage('Run Tests') {
             steps {
-                echo "🧪 Running tests..."
-                sh '''
-                    echo "🧪 Running unit tests..."
-                    npm test -- --watchAll=false --coverage
+                echo "📤 Pushing Docker image to registry..."
+                
+                script {
+                    def imageTag = params.TAG ?: 'latest'
+                    def registryTag = "${params.REGISTRY}/${IMAGE_NAME}:${imageTag}"
                     
-                    echo "🧪 Running e2e tests..."
-                    npm run test:e2e -- --watchAll=false
-                    
-                    echo "✅ All tests completed"
-                '''
-            }
-        }
-        
-        stage('Build Application') {
-            steps {
-                echo "🏗️ Building application..."
-                sh '''
-                    echo "🔨 Building NestJS application..."
-                    npm run build
-                    
-                    echo "🌱 Building seed files..."
-                    npm run build:seed
-                    
-                    echo "✅ Application built successfully"
-                '''
+                    sh """
+                        echo "🚀 Pushing image: ${registryTag}"
+                        docker push ${registryTag}
+                        
+                        # Also push latest tag if custom tag is used
+                        if [ "${imageTag}" != "latest" ]; then
+                            docker tag ${registryTag} ${params.REGISTRY}/${IMAGE_NAME}:latest
+                            docker push ${params.REGISTRY}/${IMAGE_NAME}:latest
+                            echo "✅ Also pushed latest tag"
+                        fi
+                        
+                        echo "✅ Image pushed successfully"
+                    """
+                }
             }
         }
     }
@@ -79,23 +113,28 @@ pipeline {
                 echo "  - Result: ${currentBuild.currentResult}"
                 echo "  - Duration: ${currentBuild.duration / 1000}s"
                 echo "  - Build Number: ${currentBuild.number}"
-                echo "  - Git Commit: ${GIT_COMMIT}"
-                echo "  - Git Branch: ${GIT_BRANCH}"
             }
         }
         
         success {
-            echo "🎉 Build and tests completed successfully!"
-            echo "✅ Application is ready for deployment (manual step)"
+            echo "🎉 Docker build completed successfully!"
+            
+            script {
+                if (params.REGISTRY != '') {
+                    echo "✅ Docker image is ready: ${params.REGISTRY}/${IMAGE_NAME}:${params.TAG ?: 'latest'}"
+                } else {
+                    echo "✅ Docker image is ready locally: ${IMAGE_NAME}:${params.TAG ?: 'latest'}"
+                    // Show the built images
+                    sh 'docker images'
+                }
+            }
         }
         
         failure {
-            echo "❌ Build failed - please check the logs"
-            echo "🔧 Fix the issues and push again to trigger a new build"
-        }
-        
-        unstable {
-            echo "⚠️ Build completed with test failures or warnings"
+            echo "❌ Docker build failed - please check the logs"
+            echo "🔍 Debugging info:"
+            sh 'docker --version'
+            sh 'docker images'
         }
     }
 }
