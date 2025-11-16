@@ -2,30 +2,19 @@ version: "3.8"
 
 services:
   jenkins:
-    build:
-      context: .
-      dockerfile: Dockerfile.jenkins
+    image: jenkins/jenkins:lts
     container_name: jenkins
     ports:
       - "8080:8080"
       - "50000:50000"
     environment:
       - JENKINS_ADMIN_USER=admin
-      - JENKINS_ADMIN_PASSWORD=admin
+      - JENKINS_ADMIN_PASSWORD=jenkins123
     volumes:
       - jenkins_home:/var/jenkins_home
       - /var/run/docker.sock:/var/run/docker.sock
-      # Ensure proper permissions for docker socket
-      - /var/run/docker.sock:/var/run/docker.sock:rw
     restart: unless-stopped
-    # Run as root temporarily to fix permissions, then switch to jenkins user
-    command: >
-      sh -c "
-        # Fix docker socket permissions
-        chown -R jenkins:jenkins /var/jenkins_home || true
-        # Start Jenkins
-        exec /usr/bin/tini -- /usr/local/bin/jenkins.sh
-      "
+    user: root  # TEMPORARY: Run as root to fix Docker permissions
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
