@@ -97,13 +97,13 @@ pipeline {
                     
                     # Save environment for reuse
                     cat > /tmp/nodejs-setup.sh << 'EOF'
-                    #!/bin/bash
-                    mkdir -p \$HOME/.nvm
-                    export NVM_DIR="\$HOME/.nvm"
-                    [ -s "\$NVM_DIR/nvm.sh" ] && \\. "\$NVM_DIR/nvm.sh"
-                    nvm use 20 >/dev/null 2>&1
-                    export PATH="\$NVM_DIR/versions/node/v20/bin:\$PATH"
-                    EOF
+#!/bin/bash
+mkdir -p \$HOME/.nvm
+export NVM_DIR="\$HOME/.nvm"
+[ -s "\$NVM_DIR/nvm.sh" ] && \\. "\$NVM_DIR/nvm.sh"
+nvm use 20 >/dev/null 2>&1
+export PATH="\$NVM_DIR/versions/node/v20/bin:\$PATH"
+EOF
                     
                     chmod +x /tmp/nodejs-setup.sh
                     
