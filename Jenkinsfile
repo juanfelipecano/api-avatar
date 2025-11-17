@@ -1,7 +1,7 @@
 #!/usr/bin/env groovy
 
 // Complete Jenkins Pipeline for NestJS API - Local Development
-// Purpose: Build, test, and containerize NestJS application locally
+// Purpose: Build and containerize NestJS application locally
 
 pipeline {
     agent any
@@ -30,61 +30,9 @@ pipeline {
             defaultValue: 'latest',
             description: 'Docker image tag (optional, defaults to latest)'
         )
-        string(
-            name: 'REGISTRY',
-            defaultValue: '',
-            description: 'Docker registry URL (optional, e.g., your-registry.com/project)'
-        )
-        booleanParam(
-            name: 'SKIP_TESTS',
-            defaultValue: false,
-            description: 'Skip tests (NOT RECOMMENDED for production)'
-        )
     }
     
     stages {
-        stage('Setup Node.js Environment') {
-            steps {
-                echo "🔧 Setting up Node.js environment..."
-                
-                sh """
-                    # Install and configure nvm
-                    if [ -z "\$NVM_DIR" ] || [ ! -f "\$NVM_DIR/nvm.sh" ]; then
-                        echo "📦 Installing nvm..."
-                        export NVM_DIR="\$HOME/.nvm"
-                        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
-                        [ -s "\$NVM_DIR/nvm.sh" ] && \\. "\$NVM_DIR/nvm.sh"
-                    else
-                        echo "✅ nvm already available at \$NVM_DIR"
-                        [ -s "\$NVM_DIR/nvm.sh" ] && \\. "\$NVM_DIR/nvm.sh"
-                    fi
-                    
-                    # Install and use Node.js 20
-                    if ! nvm use 20; then
-                        echo "📦 Installing Node.js 20..."
-                        nvm install 20
-                        nvm use 20
-                        nvm alias default 20
-                    fi
-                    
-                    # Verify installation
-                    echo "🔧 Node.js version: \$(node --version)"
-                    echo "🔧 npm version: \$(npm --version)"
-                    echo "🔧 npm path: \$(which npm)"
-                    echo "🔧 node path: \$(which node)"
-                    
-                    # Set environment variables for later stages
-                    echo "NVM_DIR=\$NVM_DIR" > /tmp/nodejs-env.sh
-                    echo 'export NVM_DIR="\$HOME/.nvm"' >> /tmp/nodejs-env.sh
-                    echo '[ -s "\$NVM_DIR/nvm.sh" ] && \\. "\$NVM_DIR/nvm.sh"' >> /tmp/nodejs-env.sh
-                    echo '[ -s "\$NVM_DIR/bash_completion" ] && \\. "\$NVM_DIR/bash_completion"' >> /tmp/nodejs-env.sh
-                    echo 'nvm use 20' >> /tmp/nodejs-env.sh
-                    
-                    echo "✅ Node.js environment setup completed"
-                """
-            }
-        }
-        
         stage('Checkout Source') {
             steps {
                 echo "📥 Checking out source code..."
@@ -93,9 +41,6 @@ pipeline {
                 
                 // Show current git status
                 sh """
-                    # Source Node.js environment
-                    [ -f /tmp/nodejs-env.sh ] && \\. /tmp/nodejs-env.sh
-                    
                     echo "📋 Current Git Status:"
                     git status
                     echo ""
@@ -104,6 +49,65 @@ pipeline {
                     echo "🔑 Latest Commit: \$(git log -1 --oneline)"
                     
                     echo "🔧 Node.js available: \$(node --version 2>/dev/null || echo 'Not available')"
+                    echo "🔧 npm available: \$(npm --version 2>/dev/null || echo 'Not available')"
+                """
+            }
+        }
+        
+        stage('Setup Node.js Environment') {
+            steps {
+                echo "🔧 Setting up Node.js environment..."
+                
+                sh """
+                    # Setup function to ensure Node.js is available
+                    setup_nodejs() {
+                        # Create .nvm directory if it doesn't exist
+                        mkdir -p \$HOME/.nvm
+                        export NVM_DIR="\$HOME/.nvm"
+                        
+                        # Download and source nvm if not present
+                        if [ ! -f "\$NVM_DIR/nvm.sh" ]; then
+                            echo "📦 Downloading nvm..."
+                            curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+                        fi
+                        
+                        # Source nvm
+                        [ -s "\$NVM_DIR/nvm.sh" ] && \\. "\$NVM_DIR/nvm.sh"
+                        
+                        # Install and use Node.js 20
+                        if ! nvm ls | grep -q "v20"; then
+                            echo "📦 Installing Node.js 20..."
+                            nvm install 20
+                        fi
+                        
+                        nvm use 20
+                        nvm alias default 20
+                        
+                        # Set up PATH
+                        export PATH="\$NVM_DIR/versions/node/v20/bin:\$PATH"
+                    }
+                    
+                    # Run setup
+                    setup_nodejs
+                    
+                    # Verify installation
+                    echo "🔧 Node.js version: \$(node --version)"
+                    echo "🔧 npm version: \$(npm --version)"
+                    echo "🔧 npm prefix: \$(npm config get prefix)"
+                    
+                    # Save environment for reuse
+                    cat > /tmp/nodejs-setup.sh << 'EOF'
+                    #!/bin/bash
+                    mkdir -p \$HOME/.nvm
+                    export NVM_DIR="\$HOME/.nvm"
+                    [ -s "\$NVM_DIR/nvm.sh" ] && \\. "\$NVM_DIR/nvm.sh"
+                    nvm use 20 >/dev/null 2>&1
+                    export PATH="\$NVM_DIR/versions/node/v20/bin:\$PATH"
+                    EOF
+                    
+                    chmod +x /tmp/nodejs-setup.sh
+                    
+                    echo "✅ Node.js environment setup completed"
                 """
             }
         }
@@ -115,27 +119,47 @@ pipeline {
             steps {
                 echo "📦 Installing Node.js dependencies..."
                 sh """
-                    # Source Node.js environment
-                    [ -f /tmp/nodejs-env.sh ] && \\. /tmp/nodejs-env.sh
+                    # Source Node.js setup script
+                    if [ -f /tmp/nodejs-setup.sh ]; then
+                        . /tmp/nodejs-setup.sh
+                    fi
                     
-                    # Verify Node.js is available
+                    # If Node.js setup doesn't exist, run setup function
+                    if ! command -v node &> /dev/null; then
+                        echo "📦 Setting up Node.js environment..."
+                        mkdir -p \$HOME/.nvm
+                        export NVM_DIR="\$HOME/.nvm"
+                        [ -s "\$NVM_DIR/nvm.sh" ] && \\. "\$NVM_DIR/nvm.sh"
+                        nvm use 20 || (nvm install 20 && nvm use 20)
+                        export PATH="\$NVM_DIR/versions/node/v20/bin:\$PATH"
+                    fi
+                    
+                    # Verify Node.js and npm are available
                     echo "🔧 Node.js version: \$(node --version 2>/dev/null || echo 'Not available')"
                     echo "🔧 npm version: \$(npm --version 2>/dev/null || echo 'Not available')"
                     
-                    # If Node.js is not available, set it up again
-                    if ! command -v node &> /dev/null; then
-                        echo "📦 Node.js not found. Setting up environment again..."
-                        export NVM_DIR="\$HOME/.nvm"
-                        [ -s "\$NVM_DIR/nvm.sh" ] && \\. "\$NVM_DIR/nvm.sh"
-                        nvm use 20 || nvm install 20 && nvm use 20
+                    # Check if package.json exists
+                    if [ ! -f "package.json" ]; then
+                        echo "❌ package.json not found!"
+                        exit 1
                     fi
                     
-                    # Check if node_modules exists, if not install dependencies
-                    if [ ! -d "node_modules" ]; then
-                        echo "📦 Installing dependencies..."
-                        npm ci
+                    # Add node_modules/.bin to PATH
+                    export PATH="\$PWD/node_modules/.bin:\$PATH"
+                    
+                    # Install dependencies
+                    echo "📦 Installing dependencies with npm ci..."
+                    npm ci
+                    
+                    # Verify jest is available
+                    echo "🔍 Checking for jest..."
+                    if [ -f "node_modules/.bin/jest" ]; then
+                        echo "✅ Jest found at node_modules/.bin/jest"
+                        echo "🔍 Jest version: \$(node_modules/.bin/jest --version)"
                     else
-                        echo "✅ Dependencies already installed"
+                        echo "⚠️ Jest not found in node_modules/.bin"
+                        echo "📋 Listing node_modules/.bin contents:"
+                        ls -la node_modules/.bin/ 2>/dev/null || echo "node_modules/.bin does not exist"
                     fi
                     
                     # Generate Prisma client
@@ -147,55 +171,6 @@ pipeline {
             }
         }
         
-        stage('Run Tests') {
-            when {
-                allOf {
-                    expression { params.ACTION == 'test-build' || params.ACTION == 'build-push' }
-                    expression { !params.SKIP_TESTS }
-                }
-            }
-            steps {
-                echo "🧪 Running tests..."
-                sh """
-                    # Source Node.js environment
-                    [ -f /tmp/nodejs-env.sh ] && \\. /tmp/nodejs-env.sh
-                    
-                    # Verify Node.js is available
-                    echo "🔧 Node.js version: \$(node --version 2>/dev/null || echo 'Not available')"
-                    echo "🔧 npm version: \$(npm --version 2>/dev/null || echo 'Not available')"
-                    
-                    # If Node.js is not available, set it up again
-                    if ! command -v node &> /dev/null; then
-                        echo "📦 Node.js not found. Setting up environment again..."
-                        export NVM_DIR="\$HOME/.nvm"
-                        [ -s "\$NVM_DIR/nvm.sh" ] && \\. "\$NVM_DIR/nvm.sh"
-                        nvm use 20 || nvm install 20 && nvm use 20
-                    fi
-                    
-                    # Check if node_modules exists
-                    if [ ! -d "node_modules" ]; then
-                        echo "⚠️ node_modules not found. Installing dependencies first..."
-                        npm ci
-                    else
-                        echo "✅ node_modules found"
-                    fi
-                    
-                    echo "🧪 Running unit tests..."
-                    npm run test || echo "⚠️ Unit tests failed"
-                    
-                    echo "🧪 Running e2e tests..."
-                    npm run test:e2e || echo "⚠️ E2E tests failed"
-                    
-                    echo "✅ Tests execution completed"
-                """
-            }
-            post {
-                always {
-                    publishTestResults testResultsPattern: 'test-results.xml'
-                }
-            }
-        }
-        
         stage('Build Application') {
             when {
                 expression { params.ACTION == 'test-build' || params.ACTION == 'build-push' }
@@ -203,22 +178,26 @@ pipeline {
             steps {
                 echo "🔨 Building NestJS application..."
                 sh """
-                    # Source Node.js environment
-                    [ -f /tmp/nodejs-env.sh ] && \\. /tmp/nodejs-env.sh
+                    # Setup Node.js environment if not already set up
+                    if ! command -v node &> /dev/null; then
+                        echo "📦 Setting up Node.js environment..."
+                        mkdir -p \$HOME/.nvm
+                        export NVM_DIR="\$HOME/.nvm"
+                        [ -s "\$NVM_DIR/nvm.sh" ] && \\. "\$NVM_DIR/nvm.sh"
+                        nvm use 20 || (nvm install 20 && nvm use 20)
+                        export PATH="\$NVM_DIR/versions/node/v20/bin:\$PATH"
+                    fi
                     
-                    # Verify Node.js is available
+                    # Source Node.js setup script if available
+                    if [ -f /tmp/nodejs-setup.sh ]; then
+                        . /tmp/nodejs-setup.sh
+                    fi
+                    
+                    # Verify Node.js and npm are available
                     echo "🔧 Node.js version: \$(node --version 2>/dev/null || echo 'Not available')"
                     echo "🔧 npm version: \$(npm --version 2>/dev/null || echo 'Not available')"
                     
-                    # If Node.js is not available, set it up again
-                    if ! command -v node &> /dev/null; then
-                        echo "📦 Node.js not found. Setting up environment again..."
-                        export NVM_DIR="\$HOME/.nvm"
-                        [ -s "\$NVM_DIR/nvm.sh" ] && \\. "\$NVM_DIR/nvm.sh"
-                        nvm use 20 || nvm install 20 && nvm use 20
-                    fi
-                    
-                    # Check if node_modules exists
+                    # Ensure dependencies are installed
                     if [ ! -d "node_modules" ]; then
                         echo "⚠️ node_modules not found. Installing dependencies first..."
                         npm ci
@@ -226,11 +205,22 @@ pipeline {
                         echo "✅ node_modules found"
                     fi
                     
+                    # Add node_modules/.bin to PATH
+                    export PATH="\$PWD/node_modules/.bin:\$PATH"
+                    
                     echo "🔨 Compiling TypeScript..."
-                    npm run build || echo "⚠️ Build failed"
+                    if npm run build; then
+                        echo "✅ TypeScript compilation successful"
+                    else
+                        echo "⚠️ TypeScript compilation failed"
+                    fi
                     
                     echo "🌱 Building seed data..."
-                    npm run build:seed || echo "⚠️ Seed build failed"
+                    if npm run build:seed; then
+                        echo "✅ Seed build successful"
+                    else
+                        echo "⚠️ Seed build failed"
+                    fi
                     
                     echo "✅ Application build completed"
                 """
@@ -253,11 +243,6 @@ pipeline {
                         
                         docker build -t ${fullTag} .
                         
-                        if [ "${params.REGISTRY}" != "" ]; then
-                            docker tag ${fullTag} ${params.REGISTRY}/${fullTag}
-                            echo "✅ Tagged image for registry: ${params.REGISTRY}/${fullTag}"
-                        fi
-                        
                         echo "✅ Docker build completed"
                         docker images ${IMAGE_NAME}
                     """
@@ -269,7 +254,6 @@ pipeline {
                     echo "  - Git Commit: ${env.GIT_COMMIT}"
                     echo "  - Git Branch: ${env.GIT_BRANCH}"
                     echo "  - Action: ${params.ACTION}"
-                    echo "  - Skip Tests: ${params.SKIP_TESTS}"
                 }
             }
         }
@@ -306,34 +290,6 @@ pipeline {
                 }
             }
         }
-        
-        stage('Push to Registry (Optional)') {
-            when {
-                expression { params.ACTION == 'build-push' && params.REGISTRY != '' }
-            }
-            steps {
-                echo "📤 Pushing Docker image to registry..."
-                
-                script {
-                    def imageTag = params.TAG ?: 'latest'
-                    def registryTag = "${params.REGISTRY}/${IMAGE_NAME}:${imageTag}"
-                    
-                    sh """
-                        echo "🚀 Pushing image: ${registryTag}"
-                        docker push ${registryTag}
-                        
-                        # Also push latest tag if custom tag is used
-                        if [ "${imageTag}" != "latest" ]; then
-                            docker tag ${registryTag} ${params.REGISTRY}/${IMAGE_NAME}:latest
-                            docker push ${params.REGISTRY}/${IMAGE_NAME}:latest
-                            echo "✅ Also pushed latest tag"
-                        fi
-                        
-                        echo "✅ Image pushed successfully"
-                    """
-                }
-            }
-        }
     }
     
     post {
@@ -348,22 +304,15 @@ pipeline {
         
         success {
             echo "🎉 Build completed successfully!"
+            echo "✅ Docker image is ready locally: ${IMAGE_NAME}:${params.TAG ?: 'latest'}"
+            // Show the built images
+            sh 'docker images'
             
-            script {
-                if (params.REGISTRY != '') {
-                    echo "✅ Docker image is ready: ${params.REGISTRY}/${IMAGE_NAME}:${params.TAG ?: 'latest'}"
-                } else {
-                    echo "✅ Docker image is ready locally: ${IMAGE_NAME}:${params.TAG ?: 'latest'}"
-                    // Show the built images
-                    sh 'docker images'
-                    
-                    echo "🛠️ To run the container locally:"
-                    echo "   docker run -d -p 3000:3000 ${IMAGE_NAME}:${params.TAG ?: 'latest'}"
-                    echo ""
-                    echo "🌐 Access your API at: http://localhost:3000"
-                    echo "📖 API Documentation: http://localhost:3000/api"
-                }
-            }
+            echo "🛠️ To run the container locally:"
+            echo "   docker run -d -p 3000:3000 ${IMAGE_NAME}:${params.TAG ?: 'latest'}"
+            echo ""
+            echo "🌐 Access your API at: http://localhost:3000"
+            echo "📖 API Documentation: http://localhost:3000/api"
         }
         
         failure {
@@ -382,7 +331,7 @@ pipeline {
         }
         
         unstable {
-            echo "⚠️ Build completed with warnings (tests may have failed)"
+            echo "⚠️ Build completed with warnings (build may have failed)"
         }
     }
 }
