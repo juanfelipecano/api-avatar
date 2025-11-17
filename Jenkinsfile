@@ -367,6 +367,11 @@ EOFSCRIPT
                     def fullTag = "${IMAGE_NAME}:${imageTag}"
                     
                     sh """
+                        # Clean up any existing test container
+                        echo "🧹 Cleaning up any existing test container..."
+                        docker stop avatar-api-test 2>/dev/null || true
+                        docker rm avatar-api-test 2>/dev/null || true
+                        
                         echo "🧪 Running container for testing..."
                         docker run -d --name avatar-api-test -p 3000:3000 ${fullTag}
                         
