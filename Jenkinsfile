@@ -230,11 +230,10 @@ pipeline {
         stage('Start Database') {
             steps {
                 script {
-                    docker.image('docker/compose:latest').inside {
+                    withDockerCompose(up: 'db') {
+                        echo "🗄️ Database started via docker-compose plugin"
+                        
                         sh """
-                            echo "🗄️ Starting PostgreSQL database with docker-compose..."
-                            docker-compose up -d db
-
                             echo "⏱ Waiting for DB to be healthy..."
                             for i in {1..20}; do
                                 docker exec postgres_db pg_isready -U appuser -d appdb && break
@@ -251,11 +250,10 @@ pipeline {
         stage('Build and Start API') {
             steps {
                 script {
-                    docker.image('docker/compose:latest').inside {
+                    withDockerCompose(up: 'api', build: true) {
+                        echo "🐳 API started via docker-compose plugin"
+                        
                         sh """
-                            echo "🐳 Building and starting API with docker-compose..."
-                            docker-compose up -d --build api
-
                             echo "⏱ Waiting for API to be healthy..."
                             for i in {1..30}; do
                                 docker exec nest_api node -e "require('http').get('http://localhost:3000', res=>{process.exit(res.statusCode<400?0:1)}).on('error', ()=>process.exit(1))" && break
