@@ -229,39 +229,47 @@ pipeline {
         
         stage('Start Database') {
             steps {
-                echo "🗄️ Starting PostgreSQL database with docker-compose..."
-                sh """
-                    docker-compose up -d db
+                script {
+                    docker.image('docker/compose:latest').inside {
+                        sh """
+                            echo "🗄️ Starting PostgreSQL database with docker-compose..."
+                            docker-compose up -d db
 
-                    echo "⏱ Waiting for DB to be healthy..."
-                    for i in {1..20}; do
-                        docker exec postgres_db pg_isready -U appuser -d appdb && break
-                        sleep 3
-                    done
+                            echo "⏱ Waiting for DB to be healthy..."
+                            for i in {1..20}; do
+                                docker exec postgres_db pg_isready -U appuser -d appdb && break
+                                sleep 3
+                            done
 
-                    docker ps | grep postgres_db
-                """
+                            docker ps | grep postgres_db
+                        """
+                    }
+                }
             }
         }
         
         stage('Build and Start API') {
             steps {
-                echo "🐳 Building and starting API with docker-compose..."
-                sh """
-                    docker-compose up -d --build api
+                script {
+                    docker.image('docker/compose:latest').inside {
+                        sh """
+                            echo "🐳 Building and starting API with docker-compose..."
+                            docker-compose up -d --build api
 
-                    echo "⏱ Waiting for API to be healthy..."
-                    for i in {1..30}; do
-                        docker exec nest_api node -e "require('http').get('http://localhost:3000', res=>{process.exit(res.statusCode<400?0:1)}).on('error', ()=>process.exit(1))" && break
-                        sleep 3
-                    done
+                            echo "⏱ Waiting for API to be healthy..."
+                            for i in {1..30}; do
+                                docker exec nest_api node -e "require('http').get('http://localhost:3000', res=>{process.exit(res.statusCode<400?0:1)}).on('error', ()=>process.exit(1))" && break
+                                sleep 3
+                            done
 
-                    echo "📊 Services status:"
-                    docker-compose ps
-                    
-                    echo "📋 API logs (migrations and seed):"
-                    docker-compose logs --tail=50 api
-                """
+                            echo "📊 Services status:"
+                            docker-compose ps
+                            
+                            echo "📋 API logs (migrations and seed):"
+                            docker-compose logs --tail=50 api
+                        """
+                    }
+                }
             }
         }
         
