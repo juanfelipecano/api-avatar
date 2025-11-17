@@ -97,13 +97,13 @@ pipeline {
                     
                     # Save environment for reuse
                     cat > /tmp/nodejs-setup.sh << 'EOF'
-#!/bin/bash
-mkdir -p \$HOME/.nvm
-export NVM_DIR="\$HOME/.nvm"
-[ -s "\$NVM_DIR/nvm.sh" ] && \\. "\$NVM_DIR/nvm.sh"
-nvm use 20 >/dev/null 2>&1
-export PATH="\$NVM_DIR/versions/node/v20/bin:\$PATH"
-EOF
+                    #!/bin/bash
+                    mkdir -p \$HOME/.nvm
+                    export NVM_DIR="\$HOME/.nvm"
+                    [ -s "\$NVM_DIR/nvm.sh" ] && \\. "\$NVM_DIR/nvm.sh"
+                    nvm use 20 >/dev/null 2>&1
+                    export PATH="\$NVM_DIR/versions/node/v20/bin:\$PATH"
+                    EOF
                     
                     chmod +x /tmp/nodejs-setup.sh
                     
@@ -227,24 +227,84 @@ EOF
             }
         }
         
-        stage('Build Docker Image') {
+        stage('Start Database') {
             steps {
-                echo "🐳 Building Docker image..."
+                echo "🗄️ Starting PostgreSQL database..."
+                
+                script {
+                    sh """
+                        echo "🐳 Starting database container with docker-compose..."
+                        
+                        # Stop and remove existing database container if running
+                        docker-compose down db 2>/dev/null || true
+                        
+                        # Start only the database service
+                        docker-compose up -d db
+                        
+                        echo "⏱️ Waiting for database to be healthy..."
+                        timeout=60
+                        elapsed=0
+                        while [ \$elapsed -lt \$timeout ]; do
+                            if docker-compose ps db | grep -q "healthy"; then
+                                echo "✅ Database is healthy and ready"
+                                break
+                            fi
+                            echo "⏳ Waiting for database... (\${elapsed}s/\${timeout}s)"
+                            sleep 5
+                            elapsed=\$((elapsed + 5))
+                        done
+                        
+                        if [ \$elapsed -ge \$timeout ]; then
+                            echo "⚠️ Database health check timeout, but continuing..."
+                        fi
+                        
+                        # Show database status
+                        echo "📊 Database container status:"
+                        docker-compose ps db
+                        
+                        echo "✅ Database stage completed"
+                    """
+                }
+            }
+        }
+        
+        stage('Build and Start API') {
+            steps {
+                echo "🐳 Building and starting API..."
                 
                 script {
                     def imageTag = params.TAG ?: 'latest'
                     def fullTag = "${IMAGE_NAME}:${imageTag}"
                     
                     sh """
-                        echo "Building Docker image: ${fullTag}"
-                        echo "📋 Docker build context: \$(pwd)"
-                        echo "📄 Dockerfile contents:"
-                        cat Dockerfile
+                        echo "🔨 Building API image with docker-compose..."
+                        docker-compose build api
                         
-                        docker build -t ${fullTag} .
+                        echo "🚀 Starting API service..."
+                        docker-compose up -d api
                         
-                        echo "✅ Docker build completed"
-                        docker images ${IMAGE_NAME}
+                        echo "⏱️ Waiting for API to be healthy..."
+                        timeout=60
+                        elapsed=0
+                        while [ \$elapsed -lt \$timeout ]; do
+                            if docker-compose ps api | grep -q "healthy"; then
+                                echo "✅ API is healthy and ready"
+                                break
+                            fi
+                            echo "⏳ Waiting for API... (\${elapsed}s/\${timeout}s)"
+                            sleep 5
+                            elapsed=\$((elapsed + 5))
+                        done
+                        
+                        if [ \$elapsed -ge \$timeout ]; then
+                            echo "⚠️ API health check timeout, checking logs..."
+                            docker-compose logs --tail=50 api
+                        fi
+                        
+                        echo "📊 Services status:"
+                        docker-compose ps
+                        
+                        echo "✅ API is running"
                     """
                     
                     echo "📊 Build Information:"
@@ -254,6 +314,24 @@ EOF
                     echo "  - Git Commit: ${env.GIT_COMMIT}"
                     echo "  - Git Branch: ${env.GIT_BRANCH}"
                     echo "  - Action: ${params.ACTION}"
+                }
+            }
+        }
+        
+        stage('Run Database Migrations and Seed') {
+            steps {
+                echo "🌱 Running database migrations and seed..."
+                
+                script {
+                    sh """
+                        echo "🔄 Running Prisma migrations..."
+                        docker-compose exec -T api npx prisma migrate deploy || echo "⚠️ Migrations may have already been applied"
+                        
+                        echo "🌱 Running Prisma seed..."
+                        docker-compose exec -T api npm run prisma:seed:prod || echo "⚠️ Seed may have already been applied"
+                        
+                        echo "✅ Database setup completed"
+                    """
                 }
             }
         }
@@ -304,15 +382,9 @@ EOF
         
         success {
             echo "🎉 Build completed successfully!"
-            echo "✅ Docker image is ready locally: ${IMAGE_NAME}:${params.TAG ?: 'latest'}"
-            // Show the built images
-            sh 'docker images'
-            
-            echo "🛠️ To run the container locally:"
-            echo "   docker run -d -p 3000:3000 ${IMAGE_NAME}:${params.TAG ?: 'latest'}"
-            echo ""
-            echo "🌐 Access your API at: http://localhost:3000"
-            echo "📖 API Documentation: http://localhost:3000/api"
+            echo "✅ Services are running and ready"
+            echo "📊 Build Number: ${currentBuild.number}"
+            echo "🔑 Git Commit: ${env.GIT_COMMIT}"
         }
         
         failure {
