@@ -372,14 +372,14 @@ EOFSCRIPT
                         docker stop avatar-api-test 2>/dev/null || true
                         docker rm avatar-api-test 2>/dev/null || true
                         
-                        echo "🧪 Running container for testing..."
-                        docker run -d --name avatar-api-test -p 3000:3000 ${fullTag}
+                        echo "🧪 Running container for testing on port 3001..."
+                        docker run -d --name avatar-api-test -p 3001:3000 ${fullTag}
                         
                         echo "⏱️ Waiting for container to start..."
                         sleep 10
                         
                         echo "🏥 Health check..."
-                        if curl -f http://localhost:3000/health 2>/dev/null; then
+                        if curl -f http://localhost:3001/health 2>/dev/null; then
                             echo "✅ Container is responding correctly"
                         else
                             echo "⚠️ Container may not be fully started yet"
