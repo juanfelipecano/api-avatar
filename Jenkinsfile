@@ -4,7 +4,7 @@
 // Purpose: Build, test, and containerize NestJS application locally
 
 pipeline {
-    agent none
+    agent any
     
     options {
         skipStagesAfterUnstable()
@@ -44,7 +44,6 @@ pipeline {
     
     stages {
         stage('Checkout Source') {
-            agent any
             steps {
                 echo "📥 Checking out source code..."
                 checkout scm
@@ -63,7 +62,6 @@ pipeline {
         }
         
         stage('Setup Node.js Environment') {
-            agent any
             steps {
                 echo "🔧 Setting up Node.js environment..."
                 
@@ -117,7 +115,6 @@ pipeline {
             when {
                 expression { params.ACTION == 'test-build' || params.ACTION == 'build-push' }
             }
-            agent any
             steps {
                 echo "📦 Installing Node.js dependencies..."
                 sh """
@@ -149,7 +146,6 @@ pipeline {
                     expression { !params.SKIP_TESTS }
                 }
             }
-            agent any
             steps {
                 echo "🧪 Running tests..."
                 sh """
@@ -179,7 +175,6 @@ pipeline {
             when {
                 expression { params.ACTION == 'test-build' || params.ACTION == 'build-push' }
             }
-            agent any
             steps {
                 echo "🔨 Building NestJS application..."
                 sh """
@@ -201,7 +196,6 @@ pipeline {
         }
         
         stage('Build Docker Image') {
-            agent any
             steps {
                 echo "🐳 Building Docker image..."
                 
@@ -242,7 +236,6 @@ pipeline {
             when {
                 expression { params.ACTION == 'test-build' }
             }
-            agent any
             steps {
                 echo "🚀 Testing local deployment..."
                 
@@ -276,7 +269,6 @@ pipeline {
             when {
                 expression { params.ACTION == 'build-push' && params.REGISTRY != '' }
             }
-            agent any
             steps {
                 echo "📤 Pushing Docker image to registry..."
                 
@@ -304,41 +296,37 @@ pipeline {
     
     post {
         always {
-            script {
-                echo "📋 Build Summary"
-                echo "  - Result: ${currentBuild.currentResult}"
-                echo "  - Duration: ${currentBuild.duration / 1000}s"
-                echo "  - Build Number: ${currentBuild.number}"
-                echo "  - Git Commit: ${env.GIT_COMMIT}"
-                echo "  - Git Branch: ${env.GIT_BRANCH}"
-            }
+            echo "📋 Build Summary"
+            echo "  - Result: ${currentBuild.currentResult}"
+            echo "  - Duration: ${currentBuild.duration / 1000}s"
+            echo "  - Build Number: ${currentBuild.number}"
+            echo "  - Git Commit: ${env.GIT_COMMIT}"
+            echo "  - Git Branch: ${env.GIT_BRANCH}"
         }
         
         success {
             echo "🎉 Build completed successfully!"
             
-            script {
-                if (params.REGISTRY != '') {
-                    echo "✅ Docker image is ready: ${params.REGISTRY}/${IMAGE_NAME}:${params.TAG ?: 'latest'}"
-                } else {
-                    echo "✅ Docker image is ready locally: ${IMAGE_NAME}:${params.TAG ?: 'latest'}"
-                    // Show the built images
-                    sh 'docker images'
-                    
-                    echo "🛠️ To run the container locally:"
-                    echo "   docker run -d -p 3000:3000 ${IMAGE_NAME}:${params.TAG ?: 'latest'}"
-                    echo ""
-                    echo "🌐 Access your API at: http://localhost:3000"
-                    echo "📖 API Documentation: http://localhost:3000/api"
-                }
+            if (params.REGISTRY != '') {
+                echo "✅ Docker image is ready: ${params.REGISTRY}/${IMAGE_NAME}:${params.TAG ?: 'latest'}"
+            } else {
+                echo "✅ Docker image is ready locally: ${IMAGE_NAME}:${params.TAG ?: 'latest'}"
+                // Show the built images
+                sh 'docker images'
+                
+                echo "🛠️ To run the container locally:"
+                echo "   docker run -d -p 3000:3000 ${IMAGE_NAME}:${params.TAG ?: 'latest'}"
+                echo ""
+                echo "🌐 Access your API at: http://localhost:3000"
+                echo "📖 API Documentation: http://localhost:3000/api"
             }
         }
         
         failure {
             echo "❌ Build failed - please check the logs"
             echo "🔍 Debugging info:"
-            sh 'node --version'
-            sh 'npm --version'
+            sh 'node --version 2>/dev/null || echo "Node.js not found"'
+            sh 'npm --version 2>/dev/null || echo "npm not found"'
             sh 'docker --version'
             sh 'docker images'
             
