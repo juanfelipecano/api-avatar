@@ -227,47 +227,73 @@ pipeline {
             }
         }
         
+        stage('Install Docker Compose') {
+            steps {
+                echo "📦 Installing Docker Compose latest version..."
+                sh """
+                    # Check if docker-compose is already installed
+                    if ! command -v docker-compose &> /dev/null; then
+                        echo "🔧 Installing Docker Compose..."
+                        
+                        # Download latest docker-compose
+                        COMPOSE_VERSION=\$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep 'tag_name' | cut -d'"' -f4)
+                        echo "📥 Downloading Docker Compose version: \$COMPOSE_VERSION"
+                        
+                        curl -L "https://github.com/docker/compose/releases/download/\${COMPOSE_VERSION}/docker-compose-\$(uname -s)-\$(uname -m)" -o /tmp/docker-compose
+                        chmod +x /tmp/docker-compose
+                        
+                        # Move to a location in PATH (use /tmp for Jenkins workspace)
+                        export PATH="/tmp:\$PATH"
+                        
+                        echo "✅ Docker Compose installed: \$(/tmp/docker-compose --version)"
+                    else
+                        echo "✅ Docker Compose already installed: \$(docker-compose --version)"
+                    fi
+                """
+            }
+        }
+        
         stage('Start Database') {
             steps {
-                script {
-                    withDockerCompose(up: 'db') {
-                        echo "🗄️ Database started via docker-compose plugin"
-                        
-                        sh """
-                            echo "⏱ Waiting for DB to be healthy..."
-                            for i in {1..20}; do
-                                docker exec postgres_db pg_isready -U appuser -d appdb && break
-                                sleep 3
-                            done
+                echo "🗄️ Starting PostgreSQL database..."
+                sh """
+                    # Ensure docker-compose is in PATH
+                    export PATH="/tmp:\$PATH"
+                    
+                    docker-compose up -d db
 
-                            docker ps | grep postgres_db
-                        """
-                    }
-                }
+                    echo "⏱ Waiting for DB to be healthy..."
+                    for i in {1..20}; do
+                        docker exec postgres_db pg_isready -U appuser -d appdb && break
+                        sleep 3
+                    done
+
+                    docker ps | grep postgres_db
+                """
             }
         }
         
         stage('Build and Start API') {
             steps {
-                script {
-                    withDockerCompose(up: 'api', build: true) {
-                        echo "🐳 API started via docker-compose plugin"
-                        
-                        sh """
-                            echo "⏱ Waiting for API to be healthy..."
-                            for i in {1..30}; do
-                                docker exec nest_api node -e "require('http').get('http://localhost:3000', res=>{process.exit(res.statusCode<400?0:1)}).on('error', ()=>process.exit(1))" && break
-                                sleep 3
-                            done
+                echo "🐳 Building and starting API..."
+                sh """
+                    # Ensure docker-compose is in PATH
+                    export PATH="/tmp:\$PATH"
+                    
+                    docker-compose up -d --build api
 
-                            echo "📊 Services status:"
-                            docker-compose ps
-                            
-                            echo "📋 API logs (migrations and seed):"
-                            docker-compose logs --tail=50 api
-                        """
-                    }
-                }
+                    echo "⏱ Waiting for API to be healthy..."
+                    for i in {1..30}; do
+                        docker exec nest_api node -e "require('http').get('http://localhost:3000', res=>{process.exit(res.statusCode<400?0:1)}).on('error', ()=>process.exit(1))" && break
+                        sleep 3
+                    done
+
+                    echo "📊 Services status:"
+                    docker-compose ps
+                    
+                    echo "📋 API logs (migrations and seed):"
+                    docker-compose logs --tail=50 api
+                """
             }
         }
         
