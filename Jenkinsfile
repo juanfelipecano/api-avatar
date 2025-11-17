@@ -38,11 +38,6 @@ pipeline {
         )
     }
     
-    // Local development - no webhooks, only SCM polling
-    options {
-        buildTimestamp()
-    }
-    
     stages {
         stage('Checkout Source') {
             steps {
