@@ -307,18 +307,20 @@ pipeline {
         success {
             echo "🎉 Build completed successfully!"
             
-            if (params.REGISTRY != '') {
-                echo "✅ Docker image is ready: ${params.REGISTRY}/${IMAGE_NAME}:${params.TAG ?: 'latest'}"
-            } else {
-                echo "✅ Docker image is ready locally: ${IMAGE_NAME}:${params.TAG ?: 'latest'}"
-                // Show the built images
-                sh 'docker images'
-                
-                echo "🛠️ To run the container locally:"
-                echo "   docker run -d -p 3000:3000 ${IMAGE_NAME}:${params.TAG ?: 'latest'}"
-                echo ""
-                echo "🌐 Access your API at: http://localhost:3000"
-                echo "📖 API Documentation: http://localhost:3000/api"
+            script {
+                if (params.REGISTRY != '') {
+                    echo "✅ Docker image is ready: ${params.REGISTRY}/${IMAGE_NAME}:${params.TAG ?: 'latest'}"
+                } else {
+                    echo "✅ Docker image is ready locally: ${IMAGE_NAME}:${params.TAG ?: 'latest'}"
+                    // Show the built images
+                    sh 'docker images'
+                    
+                    echo "🛠️ To run the container locally:"
+                    echo "   docker run -d -p 3000:3000 ${IMAGE_NAME}:${params.TAG ?: 'latest'}"
+                    echo ""
+                    echo "🌐 Access your API at: http://localhost:3000"
+                    echo "📖 API Documentation: http://localhost:3000/api"
+                }
             }
         }
         
