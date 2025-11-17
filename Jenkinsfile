@@ -1,7 +1,7 @@
 #!/usr/bin/env groovy
 
-// Complete Jenkins Pipeline for NestJS API
-// Purpose: Build, test, and containerize NestJS application
+// Complete Jenkins Pipeline for NestJS API - Local Development
+// Purpose: Build, test, and containerize NestJS application locally
 
 pipeline {
     agent any
@@ -38,9 +38,9 @@ pipeline {
         )
     }
     
-    triggers {
-        githubPush()
-        pollSCM('H/15 * * * *')
+    // Local development - no webhooks, only SCM polling
+    options {
+        buildTimestamp()
     }
     
     stages {
@@ -49,6 +49,16 @@ pipeline {
                 echo "📥 Checking out source code..."
                 checkout scm
                 echo "✅ Source code checked out"
+                
+                // Show current git status
+                sh """
+                    echo "📋 Current Git Status:"
+                    git status
+                    echo ""
+                    echo "🔗 Repository URL: \$(git remote get-url origin)"
+                    echo "🌿 Current Branch: \$(git branch --show-current)"
+                    echo "🔑 Latest Commit: \$(git log -1 --oneline)"
+                """
             }
         }
         
@@ -127,8 +137,8 @@ pipeline {
                     def fullTag = "${IMAGE_NAME}:${imageTag}"
                     
                     sh """
-                        echo "🏗️ Building Docker image: ${fullTag}"
-                        echo "📋 Docker build context: $(pwd)"
+                        echo "Building Docker image: ${fullTag}"
+                        echo "📋 Docker build context: \$(pwd)"
                         echo "📄 Dockerfile contents:"
                         cat Dockerfile
                         
@@ -151,6 +161,39 @@ pipeline {
                     echo "  - Git Branch: ${env.GIT_BRANCH}"
                     echo "  - Action: ${params.ACTION}"
                     echo "  - Skip Tests: ${params.SKIP_TESTS}"
+                }
+            }
+        }
+        
+        stage('Local Deployment Test') {
+            when {
+                expression { params.ACTION == 'test-build' }
+            }
+            steps {
+                echo "🚀 Testing local deployment..."
+                
+                script {
+                    def imageTag = params.TAG ?: 'latest'
+                    def fullTag = "${IMAGE_NAME}:${imageTag}"
+                    
+                    sh """
+                        echo "🧪 Running container for testing..."
+                        docker run -d --name avatar-api-test -p 3000:3000 ${fullTag}
+                        
+                        echo "⏱️ Waiting for container to start..."
+                        sleep 10
+                        
+                        echo "🏥 Health check..."
+                        if curl -f http://localhost:3000/health 2>/dev/null; then
+                            echo "✅ Container is responding correctly"
+                        else
+                            echo "⚠️ Container may not be fully started yet"
+                        fi
+                        
+                        echo "🧹 Cleaning up test container..."
+                        docker stop avatar-api-test || true
+                        docker rm avatar-api-test || true
+                    """
                 }
             }
         }
@@ -206,6 +249,12 @@ pipeline {
                     echo "✅ Docker image is ready locally: ${IMAGE_NAME}:${params.TAG ?: 'latest'}"
                     // Show the built images
                     sh 'docker images'
+                    
+                    echo "🛠️ To run the container locally:"
+                    echo "   docker run -d -p 3000:3000 ${IMAGE_NAME}:${params.TAG ?: 'latest'}"
+                    echo ""
+                    echo "🌐 Access your API at: http://localhost:3000"
+                    echo "📖 API Documentation: http://localhost:3000/api"
                 }
             }
         }
@@ -217,6 +266,12 @@ pipeline {
             sh 'npm --version'
             sh 'docker --version'
             sh 'docker images'
+            
+            echo "🔧 Common solutions:"
+            echo "1. Check if all dependencies are installed"
+            echo "2. Verify Node.js version compatibility"
+            echo "3. Ensure Docker daemon is running"
+            echo "4. Check Prisma schema validity"
         }
         
         unstable {

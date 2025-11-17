@@ -1,8 +1,8 @@
-# Basic Jenkins Configuration for NestJS - Build & Test Only
-# Minimal CI setup with no deployment and no email notifications
+# Jenkins Configuration for NestJS - Local Development Setup
+# Local CI/CD setup with GitHub repository polling
 
 jenkins:
-  systemMessage: 'NestJS Basic CI - Build & Test Only'
+  systemMessage: 'NestJS CI/CD - Local Development Setup'
   numExecutors: 2
   mode: NORMAL
   scmCheckoutRetryCount: 3
@@ -21,15 +21,11 @@ jenkins:
       generationOfSecretTokenEnabled: true
 
 unclassified:
-  # GitHub integration (basic)
-  gitHubPluginConfig:
-    webhookSecret: '${GITHUB_WEBHOOK_SECRET}'
-
   # Build configuration
   buildDiscarders:
     global:
       retention:
-        keepBuild: 5
+        keepBuild: 10
         keepDeleted: false
 
   # Build history analyzer
@@ -54,32 +50,144 @@ tools:
                         version: 'latest'
                       - name: 'prisma'
                         version: 'latest'
+  docker:
+    installations:
+      - name: 'Docker-24'
+        home: '/usr/bin/docker'
 
 # Security realm and authorization strategy
 securityRealm:
-  github:
-    clientID: '${GITHUB_CLIENT_ID}'
-    clientSecret: '${GITHUB_CLIENT_SECRET}'
+  local:
+    allowsSignup: false
+    enableCaptcha: false
 
 authorizationStrategy:
-  github:
-    authenticatedUsersReadPermission: true
-    useGithubAuth: true
+  globalMatrix:
+    entries:
+      - group: "admin"
+        permissions:
+          - "Overall/Administer"
+          - "Overall/Read"
+          - "Job/Read"
+          - "Job/Build"
+          - "Job/Configure"
+          - "Job/Create"
+          - "Job/Delete"
+          - "Job/Move"
+          - "Job/Workspace"
+          - "Run/Delete"
+          - "Run/Replay"
+          - "Run/Update"
+          - "SCM/Tag"
+    SID:
+      - "admin"
+    # Allow anonymous read access (optional for local development)
+    sids:
+      - anonymous
 
-# Job configuration
+# Job configuration for Local SCM Pipeline
 jobs:
   - type: 'job'
+    name: 'api-avatar-local'
+    disabled: false
+    displayName: 'API Avatar - Local Development Pipeline'
+    description: 'Local pipeline for GitHub repository: https://github.com/juanfelipecano/api-avatar.git'
+    
     properties:
       - buildDiscarder:
           strategy:
-            daysToKeep: 3
-            numToKeep: 5
-            artifactDaysToKeep: 7
-            artifactNumToKeep: 3
+            daysToKeep: 7
+            numToKeep: 15
+            artifactDaysToKeep: 14
+            artifactNumToKeep: 10
       - parameters:
           - booleanParam:
               defaultValue: false
               name: 'SKIP_TESTS'
               description: 'Skip running tests (NOT RECOMMENDED)'
+          - choice:
+              name: 'ACTION'
+              choices:
+                - 'build'
+                - 'test-build'
+                - 'build-push'
+              description: 'What to do: build only, test + build, or build + push'
+          - string:
+              name: 'TAG'
+              defaultValue: 'latest'
+              description: 'Docker image tag (optional, defaults to latest)'
+          - string:
+              name: 'REGISTRY'
+              defaultValue: ''
+              description: 'Docker registry URL (optional, e.g., your-registry.com/project)'
       - jenkins.scm.api.metadata:
-          autoRefresh: false
+          autoRefresh: true
+
+    scm:
+      - git:
+          url: 'https://github.com/juanfelipecano/api-avatar.git'
+          credentialsId: 'github-credentials'
+          branches:
+            - name: '*/main'
+            - name: '*/develop'
+            - name: '*/feature/*'
+            - name: '*/release/*'
+          browser: github
+          browserUrl: 'https://github.com/juanfelipecano/api-avatar'
+          browserVersion: '4.2.0'
+          gitConfigName: 'jenkins-bot'
+          gitConfigEmail: 'jenkins@example.com'
+          doGenerateSubmoduleConfigurations: false
+          extensions:
+            - localBranch:
+                cleanBeforeCheckout: true
+            - wipeOutWorkspace:
+                deleteUntrackedNestedRepositories: true
+            - cleanBeforeCheckout:
+                deleteUntrackedNestedRepositories: true
+            - cloneOption:
+                shallow: false
+                noTags: false
+                timeout: 60
+                depth: 1
+            - sparseCheckout:
+                paths:
+                  - 'Jenkinsfile'
+                  - 'package.json'
+                  - 'package-lock.json'
+                  - 'Dockerfile'
+                  - 'src/**'
+                  - 'prisma/**'
+                  - 'test/**'
+                  - '.eslintrc.js'
+                  - 'tsconfig*.json'
+
+    # Local development triggers - SCM polling only
+    triggers:
+      - pollSCM:
+          cron: 'H/10 * * * *'  # Poll every 10 minutes
+
+    quietPeriod: 5
+    canRoam: false
+    concurrentBuild: false
+    disabled: false
+
+# Global SCM polling configuration
+triggers:
+  globalTriggers:
+    - type: 'pollSCM'
+      enabled: true
+
+# Pipeline configuration for local development
+unclassified:
+  buildStatusTriggers:
+    - type: 'local'
+      enabled: true
+
+# Additional global configuration
+unclassified:
+  location:
+    url: 'http://localhost:8080'
+    
+  quietDownCause:
+    reason: 'Local Development Setup'
